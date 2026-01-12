@@ -1,9 +1,11 @@
 name: Generate Release Notes
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (example: v1.0.82)"
+        required: true
 
 jobs:
   release-notes:
@@ -17,21 +19,25 @@ jobs:
 
       - name: Set variables
         run: |
-          echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
-          echo "PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p')" >> $GITHUB_ENV
+          TAG=${{ github.event.inputs.tag }}
+          echo "VERSION=$TAG" >> $GITHUB_ENV
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "$TAG" | head -n 1)
+          echo "PREV_TAG=$PREV_TAG" >> $GITHUB_ENV
 
       - name: Generate Internal Release Notes
         run: |
           mkdir -p release-notes/${VERSION}
           echo "# Internal Release Notes – ${VERSION}" > release-notes/${VERSION}/internal.md
           echo "" >> release-notes/${VERSION}/internal.md
-          git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%an)" >> release-notes/${VERSION}/internal.md
+          git log ${PREV_TAG}..${VERSION} --pretty=format:"- %s (%an)" >> release-notes/${VERSION}/internal.md
 
       - name: Generate External Release Notes
         run: |
           echo "# External Release Notes – ${VERSION}" > release-notes/${VERSION}/external.md
           echo "" >> release-notes/${VERSION}/external.md
-          git log ${PREV_TAG}..HEAD --pretty=format:"- %s" | grep -E "^-( feat:| fix:)" >> release-notes/${VERSION}/external.md || true
+          git log ${PREV_TAG}..${VERSION} --pretty=format:"- %s" \
+            | grep -E "^(feat|fix):" \
+            >> release-notes/${VERSION}/external.md || true
 
       - name: Commit Release Notes
         run: |
