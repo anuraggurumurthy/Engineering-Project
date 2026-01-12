@@ -1,0 +1,42 @@
+name: Generate Release Notes
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release-notes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set variables
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          echo "PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p')" >> $GITHUB_ENV
+
+      - name: Generate Internal Release Notes
+        run: |
+          mkdir -p release-notes/${VERSION}
+          echo "# Internal Release Notes – ${VERSION}" > release-notes/${VERSION}/internal.md
+          echo "" >> release-notes/${VERSION}/internal.md
+          git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%an)" >> release-notes/${VERSION}/internal.md
+
+      - name: Generate External Release Notes
+        run: |
+          echo "# External Release Notes – ${VERSION}" > release-notes/${VERSION}/external.md
+          echo "" >> release-notes/${VERSION}/external.md
+          git log ${PREV_TAG}..HEAD --pretty=format:"- %s" | grep -E "^-( feat:| fix:)" >> release-notes/${VERSION}/external.md || true
+
+      - name: Commit Release Notes
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@company.com"
+          git add release-notes/${VERSION}
+          git commit -m "docs: add release notes for ${VERSION}" || exit 0
+          git push
