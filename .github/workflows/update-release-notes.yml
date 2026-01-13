@@ -23,49 +23,48 @@ jobs:
           COMMIT_MSG="${{ steps.commit.outputs.msg }}"
           FILE="release-notes/RELEASE_v1.0.89.txt"
 
-          if [[ ! -f "$FILE" ]]; then
-            echo "Release file not found"
-            exit 1
+          # Ignore release commits cleanly
+          if [[ "$COMMIT_MSG" =~ ^release: ]]; then
+            echo "Release commit detected. Skipping update."
+            exit 0
           fi
 
-          # ---------- FEATURE ----------
           if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
             ITEM="- ${COMMIT_MSG#feat: }"
+            SECTION="Features"
 
-            awk -v item="$ITEM" '
-            BEGIN { done=0 }
-            {
-              print
-              if ($0=="Features:" && !done) {
-                getline
-                if ($0!="") print
-                print item
-                done=1
-              }
-            }
-            ' "$FILE" > tmp && mv tmp "$FILE"
-          fi
-
-          # ---------- FIX ----------
-          if [[ "$COMMIT_MSG" =~ ^fix: ]]; then
+          elif [[ "$COMMIT_MSG" =~ ^fix: ]]; then
             ITEM="- ${COMMIT_MSG#fix: }"
+            SECTION="Fixes"
 
-            awk -v item="$ITEM" '
-            BEGIN { done=0 }
-            {
-              if ($0=="Fixes:" && !done) {
-                print ""        # 👈 FORCE ONE BLANK LINE
-                print
-                getline
-                if ($0!="") print
-                print item
-                done=1
-                next
-              }
-              print
-            }
-            ' "$FILE" > tmp && mv tmp "$FILE"
+          else
+            echo "Not a feat/fix commit. Skipping."
+            exit 0
           fi
+
+          awk -v section="$SECTION" -v item="$ITEM" '
+          BEGIN { inserted=0 }
+          {
+            print
+            if ($0 == section ":") {
+              getline
+              while ($0 == "") getline
+              print ""
+              print item
+              print ""
+              print
+              inserted=1
+            }
+          }
+          END {
+            if (!inserted) {
+              print ""
+              print section ":"
+              print ""
+              print item
+            }
+          }
+          ' "$FILE" > tmp && mv tmp "$FILE"
 
       - name: Commit and push changes
         run: |
@@ -75,5 +74,5 @@ jobs:
           git add release-notes/
           git diff --cached --quiet && exit 0
 
-          git commit -m "docs: update release notes v1.0.89"
+          git commit -m "docs: update release notes"
           git push
