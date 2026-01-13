@@ -6,67 +6,54 @@ on:
       - master
 
 jobs:
-  update-release-notes:
+  release-notes:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Get commit message
+      - name: Get last commit message
         id: commit
         run: |
-          echo "msg=$(git log -1 --pretty=%B | tr -d '\n')" >> $GITHUB_OUTPUT
+          echo "msg=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
 
       - name: Update release notes
         run: |
           COMMIT_MSG="${{ steps.commit.outputs.msg }}"
           FILE="release-notes/RELEASE_v1.0.89.txt"
 
-          # Ignore release commits cleanly
-          if [[ "$COMMIT_MSG" =~ ^release: ]]; then
-            echo "Release commit detected. Skipping update."
-            exit 0
-          fi
+          # Ignore merge & release commits
+          [[ "$COMMIT_MSG" =~ ^Merge ]] && exit 0
+          [[ "$COMMIT_MSG" =~ ^release: ]] && exit 0
 
           if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            ITEM="- ${COMMIT_MSG#feat: }"
             SECTION="Features"
-
+            ITEM="- ${COMMIT_MSG#feat: }"
           elif [[ "$COMMIT_MSG" =~ ^fix: ]]; then
-            ITEM="- ${COMMIT_MSG#fix: }"
             SECTION="Fixes"
-
+            ITEM="- ${COMMIT_MSG#fix: }"
           else
-            echo "Not a feat/fix commit. Skipping."
             exit 0
           fi
 
           awk -v section="$SECTION" -v item="$ITEM" '
-          BEGIN { inserted=0 }
           {
             print
             if ($0 == section ":") {
               getline
-              while ($0 == "") getline
-              print ""
               print item
-              print ""
-              print
-              inserted=1
             }
           }
           END {
-            if (!inserted) {
+            if (!found) {
               print ""
               print section ":"
-              print ""
               print item
             }
           }
           ' "$FILE" > tmp && mv tmp "$FILE"
 
-      - name: Commit and push changes
+      - name: Commit & push
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
