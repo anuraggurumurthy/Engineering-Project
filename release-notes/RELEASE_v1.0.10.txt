@@ -3,3 +3,4 @@ Date: Tue Jan 13 19:16:24 IST 2026
 
 Features:
 Fixes:
+- efhidx
