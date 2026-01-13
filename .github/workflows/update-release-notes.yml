@@ -1,79 +1,76 @@
-name: Auto Update Release Notes
+name: Update Release Notes
 
 on:
   push:
     branches:
       - master
 
-permissions:
-  contents: write
-
 jobs:
-  release-notes:
+  update-release-notes:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Process commit
+      - name: Read commit message
+        id: commit
         run: |
-          set -e
+          echo "msg=$(git log -1 --pretty=%B | tr -d '\n')" >> $GITHUB_OUTPUT
 
-          COMMIT_MSG="$(git log -1 --pretty=%s)"
-          DATE="$(TZ=Asia/Kolkata date '+%a %b %d %H:%M:%S IST %Y')"
+      - name: Update release notes file
+        run: |
+          COMMIT_MSG="${{ steps.commit.outputs.msg }}"
+          FILE="release-notes/RELEASE_v1.0.89.txt"
 
-          mkdir -p release-notes
+          if [[ ! -f "$FILE" ]]; then
+            echo "Release file not found"
+            exit 1
+          fi
 
-          echo "Commit: $COMMIT_MSG"
+          # ---------- FEATURE ----------
+          if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
+            ITEM="- ${COMMIT_MSG#feat: }"
 
-          # ---------------- RELEASE ----------------
-          if [[ "$COMMIT_MSG" =~ ^release:\ (.+)$ ]]; then
-            VERSION="${BASH_REMATCH[1]}"
-            FILE="release-notes/RELEASE_v$VERSION.txt"
-
-            echo "$VERSION" > release-notes/.current_release
-
+            awk -v item="$ITEM" '
+            BEGIN { added=0 }
             {
-              echo "Release v$VERSION Date: $DATE"
-              echo
-              echo "Features:"
-              echo
-              echo "Fixes:"
-              echo
-            } > "$FILE"
-
-            git add "$FILE" release-notes/.current_release
-            git commit -m "docs: create release v$VERSION"
-            git push
-            exit 0
+              print
+              if ($0 == "Features:" && !added) {
+                getline
+                if ($0 != "") print
+                print item
+                added=1
+              }
+            }
+            ' "$FILE" > tmp && mv tmp "$FILE"
           fi
 
-          # ---------------- REQUIRE ACTIVE RELEASE ----------------
-          if [ ! -f release-notes/.current_release ]; then
-            echo "No active release. Skipping."
-            exit 0
+          # ---------- FIX ----------
+          if [[ "$COMMIT_MSG" =~ ^fix: ]]; then
+            ITEM="- ${COMMIT_MSG#fix: }"
+
+            awk -v item="$ITEM" '
+            BEGIN { added=0 }
+            {
+              print
+              if ($0 == "Fixes:" && !added) {
+                getline
+                if ($0 != "") print
+                print item
+                added=1
+              }
+            }
+            ' "$FILE" > tmp && mv tmp "$FILE"
           fi
 
-          VERSION="$(cat release-notes/.current_release)"
-          FILE="release-notes/RELEASE_v$VERSION.txt"
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
 
-          # ---------------- FEATURE ----------------
-          if [[ "$COMMIT_MSG" =~ ^feat:\ (.+)$ ]]; then
-            sed -i "/^Features:/a\\\n- ${BASH_REMATCH[1]}" "$FILE"
-          fi
+          git add release-notes/
+          git diff --cached --quiet && exit 0
 
-          # ---------------- FIX ----------------
-          if [[ "$COMMIT_MSG" =~ ^fix:\ (.+)$ ]]; then
-            sed -i "/^Fixes:/a\\\n- ${BASH_REMATCH[1]}" "$FILE"
-          fi
-
-          git add "$FILE"
-
-          if git diff --cached --quiet; then
-            echo "Nothing to commit"
-            exit 0
-          fi
-
-          git commit -m "docs: update release v$VERSION"
+          git commit -m "docs: update release notes v1.0.89"
           git push
