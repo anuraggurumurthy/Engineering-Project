@@ -61,6 +61,12 @@ jobs:
             sed -i "/^Fixes:/a\\- ${COMMIT_SUBJECT#fix: }" "$FILE"
           fi
 
+          # Ensure blank line before Fixes if features exist
+          sed -i '/^- .*$/{
+            N
+            s/\nFixes:/\n\nFixes:/
+          }' "$FILE"
+
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add "$FILE"
