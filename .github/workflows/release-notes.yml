@@ -13,26 +13,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Update release notes
+      - name: Generate / Update release notes
         run: |
           set -e
 
+          AUTHOR=$(git log -1 --pretty=%an)
           COMMIT_MSG=$(git log -1 --pretty=%s)
           DATE=$(TZ="Asia/Kolkata" date +"%a %b %d %H:%M:%S IST %Y")
 
+          # ❌ Ignore bot commits
+          if [[ "$AUTHOR" == "github-actions" ]]; then
+            echo "Skipping bot commit"
+            exit 0
+          fi
+
           mkdir -p release-notes
 
-          # -------------------------------
-          # 1️⃣ If this is a RELEASE commit
-          # -------------------------------
-          if [[ "$COMMIT_MSG" =~ ^release:\ v ]]; then
+          # -----------------------
+          # RELEASE commit
+          # -----------------------
+          if [[ "$COMMIT_MSG" =~ ^release:\ ?v ]]; then
             VERSION=$(echo "$COMMIT_MSG" | sed 's/release: //')
 
             echo "$VERSION" > release-notes/.current_release
-
             FILE="release-notes/RELEASE_${VERSION}.txt"
 
             if [ ! -f "$FILE" ]; then
@@ -46,17 +53,20 @@ jobs:
               } > "$FILE"
             fi
 
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+
             git add release-notes
             git commit -m "docs: start release notes $VERSION"
             git push
             exit 0
           fi
 
-          # --------------------------------
-          # 2️⃣ Normal feat / fix commits
-          # --------------------------------
+          # -----------------------
+          # FEAT / FIX commits
+          # -----------------------
           if [ ! -f release-notes/.current_release ]; then
-            echo "No active release. Skipping."
+            echo "No active release"
             exit 0
           fi
 
@@ -68,9 +78,12 @@ jobs:
           elif [[ "$COMMIT_MSG" =~ ^fix: ]]; then
             sed -i "/^Fixes:/a\\- ${COMMIT_MSG#fix: }" "$FILE"
           else
-            echo "Not feat/fix. Skipping."
+            echo "Not feat/fix"
             exit 0
           fi
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
 
           git add "$FILE"
           git commit -m "docs: update release notes $VERSION"
