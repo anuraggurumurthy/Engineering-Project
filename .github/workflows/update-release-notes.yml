@@ -1,9 +1,10 @@
-name: Auto Update Release Notes
+name: Auto Release Notes (TXT)
 
 on:
   push:
     branches:
       - master
+      - main
 
 permissions:
   contents: write
@@ -13,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Configure Git
@@ -21,10 +22,10 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Update Release Notes
+      - name: Process Commit Message
         run: |
-          COMMIT_MSG="$(git log -1 --pretty=%B)"
-          echo "Commit: $COMMIT_MSG"
+          COMMIT_MSG="$(git log -1 --pretty=%B | tr -d '\r')"
+          echo "Commit message: $COMMIT_MSG"
 
           mkdir -p release-notes
 
@@ -37,12 +38,12 @@ jobs:
             FILE="release-notes/$VERSION.txt"
 
             cat <<EOF > "$FILE"
-          Release: $VERSION
+Release: $VERSION
 
-          Features:
+Features:
 
-          Fixes:
-          EOF
+Fixes:
+EOF
 
             git add release-notes
             git commit -m "chore: create release $VERSION"
@@ -50,19 +51,35 @@ jobs:
 
           # ---------------- FEAT / FIX ----------------
           elif [[ "$COMMIT_MSG" == feat:* || "$COMMIT_MSG" == fix:* ]]; then
+            if [[ ! -f release-notes/CURRENT_VERSION.txt ]]; then
+              echo "❌ No active release found. Create a release first."
+              exit 1
+            fi
+
             TYPE=$(echo "$COMMIT_MSG" | cut -d: -f1)
             MESSAGE=$(echo "$COMMIT_MSG" | sed 's/^[a-z]*:[[:space:]]*//')
-
             VERSION=$(cat release-notes/CURRENT_VERSION.txt)
+
             FILE="release-notes/$VERSION.txt"
 
             if [[ "$TYPE" == "feat" ]]; then
-              sed -i "/Features:/a - $MESSAGE" "$FILE"
+              sed -i "/^Features:/a - $MESSAGE" "$FILE"
             else
-              sed -i "/Fixes:/a - $MESSAGE" "$FILE"
+              sed -i "/^Fixes:/a - $MESSAGE" "$FILE"
             fi
 
             git add "$FILE"
             git commit -m "docs: update release notes"
             git push
           fi
+
+      # ---------------- GITHUB RELEASE ----------------
+      - name: Create GitHub Release
+        if: startsWith(github.event.head_commit.message, 'release:')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.head_commit.message }}
+          name: Release ${{ github.event.head_commit.message }}
+          body_path: release-notes/${{ github.event.head_commit.message }}.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
