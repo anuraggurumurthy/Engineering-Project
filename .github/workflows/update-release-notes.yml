@@ -18,59 +18,34 @@ jobs:
         run: |
           echo "msg=$(git log -1 --pretty=%B | tr -d '\n')" >> $GITHUB_OUTPUT
 
-      - name: Get current release file
-        id: release
-        run: |
-          VERSION=$(ls release-notes/RELEASE_v*.txt | sort -V | tail -n 1)
-          echo "file=$VERSION" >> $GITHUB_OUTPUT
-
       - name: Update release notes
         run: |
           COMMIT_MSG="${{ steps.commit.outputs.msg }}"
-          FILE="${{ steps.release.outputs.file }}"
+          FILE="release-notes/RELEASE_v1.0.89.txt"
 
           if [[ ! -f "$FILE" ]]; then
             echo "Release file not found"
             exit 1
           fi
 
-          # ---------- FEAT ----------
           if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            ENTRY="- ${COMMIT_MSG#feat: }"
+            TEXT="- ${COMMIT_MSG#feat: }"
 
-            awk -v entry="$ENTRY" '
-            BEGIN { done=0 }
-            /^Features:/ {
-              print
-              print ""           # <<< FORCE BLANK LINE
-              while (getline && $0 ~ /^-/) print
-              if (!done) {
-                print entry
-                done=1
-              }
-              print ""
-              next
-            }
+            awk -v text="$TEXT" '
+            BEGIN { in_section=0 }
+            /^Features:/ { print; in_section=1; next }
+            /^Fixes:/ { in_section=0; print }
+            in_section && NF==0 { print text; in_section=0 }
             { print }
             ' "$FILE" > tmp && mv tmp "$FILE"
 
-          # ---------- FIX ----------
           elif [[ "$COMMIT_MSG" =~ ^fix: ]]; then
-            ENTRY="- ${COMMIT_MSG#fix: }"
+            TEXT="- ${COMMIT_MSG#fix: }"
 
-            awk -v entry="$ENTRY" '
-            BEGIN { done=0 }
-            /^Fixes:/ {
-              print
-              print ""           # <<< FORCE BLANK LINE
-              while (getline && $0 ~ /^-/) print
-              if (!done) {
-                print entry
-                done=1
-              }
-              print ""
-              next
-            }
+            awk -v text="$TEXT" '
+            BEGIN { in_section=0 }
+            /^Fixes:/ { print; in_section=1; next }
+            in_section && NF==0 { print text; in_section=0 }
             { print }
             ' "$FILE" > tmp && mv tmp "$FILE"
 
@@ -87,5 +62,5 @@ jobs:
           git add release-notes/
           git diff --cached --quiet && exit 0
 
-          git commit -m "docs: update release notes"
+          git commit -m "docs: update release notes v1.0.89"
           git push
