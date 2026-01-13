@@ -1,4 +1,4 @@
-name: Auto Generate Release Notes
+name: Versioned Release Notes
 
 on:
   push:
@@ -10,17 +10,47 @@ permissions:
 
 jobs:
   release:
+    if: contains(github.event.head_commit.message, 'release:')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Generate Release Notes
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(echo "${{ github.event.head_commit.message }}" | sed 's/release: //')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        run: |
+          FILE=releases/RELEASE_${{ steps.version.outputs.version }}.txt
+          mkdir -p releases
+
+          echo "Release ${{ steps.version.outputs.version }}" > $FILE
+          echo "Date: $(date)" >> $FILE
+          echo "" >> $FILE
+
+          echo "Features:" >> $FILE
+          git log --pretty=format:"- %s" | grep "^feat:" || true >> $FILE
+          echo "" >> $FILE
+
+          echo "Fixes:" >> $FILE
+          git log --pretty=format:"- %s" | grep "^fix:" || true >> $FILE
+
+      - name: Commit release notes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add releases/
+          git commit -m "docs: release notes ${{ steps.version.outputs.version }}"
+          git push
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          tag_name: auto-${{ github.run_number }}
-          name: Release auto-${{ github.run_number }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body_path: releases/RELEASE_${{ steps.version.outputs.version }}.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
