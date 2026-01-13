@@ -1,69 +1,72 @@
-name: Versioned Release Notes
+name: Auto Release Notes
 
 on:
   push:
     branches:
       - master
 
-permissions:
-  contents: write
-
 jobs:
-  release:
-    # Run ONLY when last commit is release:
-    if: startsWith(github.event.head_commit.message, 'release:')
+  generate-release-notes:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo (FULL HISTORY)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # REQUIRED for git history
-
-      - name: Extract version
-        id: version
-        run: |
-          VERSION=$(echo "${{ github.event.head_commit.message }}" | cut -d' ' -f2)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fetch-depth: 0
 
       - name: Generate release notes
         run: |
-          FILE=release-notes/RELEASE_${{ steps.version.outputs.version }}.txt
-          mkdir -p release-notes
+          set -e
 
-          echo "Release ${{ steps.version.outputs.version }}" > $FILE
-          echo "Date: $(TZ=Asia/Kolkata date '+%a %b %d %H:%M:%S IST %Y')" >> $FILE
-          echo "" >> $FILE
+          # Get latest release commit
+          RELEASE_COMMIT=$(git log --grep="^release:" --format="%H" -n 1)
 
-          # Get previous release commit (NOT tag)
-          PREV_RELEASE_COMMIT=$(git log --grep="^release:" --pretty=format:"%H" -n 2 | tail -n 1)
-
-          if [ -n "$PREV_RELEASE_COMMIT" ]; then
-            RANGE="$PREV_RELEASE_COMMIT..HEAD"
-          else
-            RANGE="HEAD"
+          if [ -z "$RELEASE_COMMIT" ]; then
+            echo "No release commit found"
+            exit 0
           fi
 
-          echo "Features:" >> $FILE
-          git log $RANGE --pretty=format:"- %s" | grep "^feat:" || true >> $FILE
-          echo "" >> $FILE
+          VERSION=$(git log -1 --pretty=%B "$RELEASE_COMMIT" | sed 's/release:[[:space:]]*//')
 
-          echo "Fixes:" >> $FILE
-          git log $RANGE --pretty=format:"- %s" | grep "^fix:" || true >> $FILE
+          # Get previous release commit
+          PREV_RELEASE=$(git log --grep="^release:" --format="%H" -n 2 | tail -n 1)
 
-      - name: Commit release notes
-        run: |
+          if [ -z "$PREV_RELEASE" ]; then
+            RANGE="$RELEASE_COMMIT"
+          else
+            RANGE="$PREV_RELEASE..$RELEASE_COMMIT"
+          fi
+
+          echo "Commit range: $RANGE"
+
+          FEATURES=$(git log $RANGE --no-merges --pretty=%s | grep "^feat:" || true)
+          FIXES=$(git log $RANGE --no-merges --pretty=%s | grep "^fix:" || true)
+
+          mkdir -p release-notes
+          FILE="release-notes/RELEASE_v${VERSION}.txt"
+
+          {
+            echo "Release v${VERSION}"
+            echo "Date: $(TZ=Asia/Kolkata date)"
+            echo
+            echo "Features:"
+            if [ -n "$FEATURES" ]; then
+              echo "$FEATURES" | sed 's/^/- /'
+            else
+              echo "- None"
+            fi
+            echo
+            echo "Fixes:"
+            if [ -n "$FIXES" ]; then
+              echo "$FIXES" | sed 's/^/- /'
+            else
+              echo "- None"
+            fi
+          } > "$FILE"
+
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add release-notes/
-          git commit -m "docs: release notes ${{ steps.version.outputs.version }}"
+          git add "$FILE"
+          git commit -m "docs: release notes v${VERSION}"
           git push
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: Release ${{ steps.version.outputs.version }}
-          body_path: release-notes/RELEASE_${{ steps.version.outputs.version }}.txt
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
