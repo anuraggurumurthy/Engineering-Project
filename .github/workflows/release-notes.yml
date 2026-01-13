@@ -6,62 +6,77 @@ on:
       - master
 
 jobs:
-  update-release-notes:
+  release-notes:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get commit message
+      - name: Read commit message
         id: commit
         run: |
-          echo "msg=$(git log -1 --pretty=%B | tr -d '\n')" >> $GITHUB_OUTPUT
+          echo "msg=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ steps.commit.outputs.msg }}" =~ release:\ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            echo "ver=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+          else
+            echo "ver=$(cat release-notes/.current_release 2>/dev/null || echo 0.0.0)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set IST time
+        id: time
+        run: |
+          echo "now=$(TZ=Asia/Kolkata date '+%a %b %d %H:%M:%S IST %Y')" >> $GITHUB_OUTPUT
 
       - name: Update release notes
         run: |
-          COMMIT_MSG="${{ steps.commit.outputs.msg }}"
-          FILE="release-notes/RELEASE_v1.0.89.txt"
+          VERSION=${{ steps.version.outputs.ver }}
+          FILE="release-notes/RELEASE_v${VERSION}.txt"
+          MSG="${{ steps.commit.outputs.msg }}"
+          DATE="${{ steps.time.outputs.now }}"
+
+          mkdir -p release-notes
 
           if [[ ! -f "$FILE" ]]; then
-            echo "Release file not found"
-            exit 1
+            cat <<EOF > "$FILE"
+Release v$VERSION
+Date: $DATE
+
+Features:
+
+Fixes:
+EOF
           fi
 
-          if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            FEATURE="- ${COMMIT_MSG#feat: }"
-
-            awk -v feature="$FEATURE" '
-            BEGIN { added=0 }
-            /^Features:/ {
-              print
-              getline
-              while ($0 == "") getline   # REMOVE blank lines
-              if (!added) {
-                print feature
-                added=1
-              }
-              print
-              next
-            }
-            { print }
-            ' "$FILE" > tmp && mv tmp "$FILE"
-
-          elif [[ "$COMMIT_MSG" =~ ^fix: ]]; then
-            sed -i "/^Fixes:/a\\- ${COMMIT_MSG#fix: }" "$FILE"
-
-          else
-            echo "No feat/fix commit. Skipping."
-            exit 0
+          if [[ "$MSG" == feat:* ]]; then
+            sed -i "/^Features:/a\\- ${MSG}" "$FILE"
           fi
 
-      - name: Commit and push changes
+          if [[ "$MSG" == fix:* ]]; then
+            sed -i "/^Fixes:/a\\- ${MSG}" "$FILE"
+          fi
+
+          echo "$VERSION" > release-notes/.current_release
+
+      - name: Normalize spacing
+        run: |
+          FILE="release-notes/RELEASE_v${{ steps.version.outputs.ver }}.txt"
+          awk '
+          /^Release / { print; next }
+          /^Date:/ { print; print ""; next }
+          /^Features:/ { print; next }
+          /^Fixes:/ { print ""; print; next }
+          { print }
+          ' "$FILE" > tmp && mv tmp "$FILE"
+
+      - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-
-          git add release-notes/
-          git diff --cached --quiet && exit 0
-
-          git commit -m "docs: update release notes v1.0.89"
+          git add release-notes
+          git commit -m "docs: update release notes v${{ steps.version.outputs.ver }}" || echo "No changes"
           git push
