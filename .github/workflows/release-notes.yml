@@ -29,12 +29,19 @@ jobs:
           fi
 
           if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            awk -v msg="- ${COMMIT_MSG#feat: }" '
+            FEATURE="- ${COMMIT_MSG#feat: }"
+
+            awk -v feature="$FEATURE" '
+            BEGIN { added=0 }
             /^Features:/ {
               print
               getline
+              while ($0 == "") getline   # REMOVE blank lines
+              if (!added) {
+                print feature
+                added=1
+              }
               print
-              print msg
               next
             }
             { print }
