@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configure Git
@@ -22,16 +22,16 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Process Commit Message
+      - name: Update release notes
         run: |
           COMMIT_MSG="$(git log -1 --pretty=%B | tr -d '\r')"
-          echo "Commit message: $COMMIT_MSG"
+          echo "Commit: $COMMIT_MSG"
 
           mkdir -p release-notes
 
-          # ---------------- RELEASE ----------------
+          # -------- RELEASE --------
           if [[ "$COMMIT_MSG" == release:* ]]; then
-            VERSION=$(echo "$COMMIT_MSG" | sed 's/release:[[:space:]]*//')
+            VERSION="${COMMIT_MSG#release: }"
 
             echo "$VERSION" > release-notes/CURRENT_VERSION.txt
 
@@ -46,19 +46,15 @@ Fixes:
 EOF
 
             git add release-notes
-            git commit -m "chore: create release $VERSION"
+            git commit -m "chore: release $VERSION"
             git push
 
-          # ---------------- FEAT / FIX ----------------
+          # -------- FEAT / FIX --------
           elif [[ "$COMMIT_MSG" == feat:* || "$COMMIT_MSG" == fix:* ]]; then
-            if [[ ! -f release-notes/CURRENT_VERSION.txt ]]; then
-              echo "❌ No active release found. Create a release first."
-              exit 1
-            fi
-
-            TYPE=$(echo "$COMMIT_MSG" | cut -d: -f1)
-            MESSAGE=$(echo "$COMMIT_MSG" | sed 's/^[a-z]*:[[:space:]]*//')
             VERSION=$(cat release-notes/CURRENT_VERSION.txt)
+
+            TYPE="${COMMIT_MSG%%:*}"
+            MESSAGE="${COMMIT_MSG#*: }"
 
             FILE="release-notes/$VERSION.txt"
 
@@ -73,7 +69,6 @@ EOF
             git push
           fi
 
-      # ---------------- GITHUB RELEASE ----------------
       - name: Create GitHub Release
         if: startsWith(github.event.head_commit.message, 'release:')
         uses: softprops/action-gh-release@v2
