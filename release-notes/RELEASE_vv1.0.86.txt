@@ -1,8 +1,0 @@
-Release vv1.0.86
-Date: Tue Jan 13 14:09:46 IST 2026
-
-Features:
-- feat: test release notes generation
-
-Fixes:
-- None
