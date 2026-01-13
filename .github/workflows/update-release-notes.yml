@@ -10,34 +10,41 @@ permissions:
   contents: write
 
 jobs:
-  release-notes:
+  update-files:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+      - name: Extract commit info
+        id: extract
+        run: |
+          MSG="$(git log -1 --pretty=%B | tr -d '\r')"
+          echo "msg=$MSG" >> $GITHUB_OUTPUT
+
+          if [[ "$MSG" == release:* ]]; then
+            VERSION="${MSG#release: }"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
       - name: Update release notes
         run: |
-          COMMIT_MSG="$(git log -1 --pretty=%B | tr -d '\r')"
-          echo "Commit: $COMMIT_MSG"
+          MSG="${{ steps.extract.outputs.msg }}"
+          VERSION="${{ steps.extract.outputs.version }}"
 
           mkdir -p release-notes
 
-          # -------- RELEASE --------
-          if [[ "$COMMIT_MSG" == release:* ]]; then
-            VERSION="${COMMIT_MSG#release: }"
-
+          if [[ "$MSG" == release:* ]]; then
             echo "$VERSION" > release-notes/CURRENT_VERSION.txt
 
-            FILE="release-notes/$VERSION.txt"
-
-            cat <<EOF > "$FILE"
+            cat <<EOF > release-notes/$VERSION.txt
 Release: $VERSION
 
 Features:
@@ -46,22 +53,18 @@ Fixes:
 EOF
 
             git add release-notes
-            git commit -m "chore: release $VERSION"
+            git commit -m "chore: prepare release $VERSION"
             git push
 
-          # -------- FEAT / FIX --------
-          elif [[ "$COMMIT_MSG" == feat:* || "$COMMIT_MSG" == fix:* ]]; then
+          elif [[ "$MSG" == feat:* || "$MSG" == fix:* ]]; then
             VERSION=$(cat release-notes/CURRENT_VERSION.txt)
-
-            TYPE="${COMMIT_MSG%%:*}"
-            MESSAGE="${COMMIT_MSG#*: }"
-
             FILE="release-notes/$VERSION.txt"
+            TEXT="${MSG#*: }"
 
-            if [[ "$TYPE" == "feat" ]]; then
-              sed -i "/^Features:/a - $MESSAGE" "$FILE"
+            if [[ "$MSG" == feat:* ]]; then
+              sed -i "/^Features:/a - $TEXT" "$FILE"
             else
-              sed -i "/^Fixes:/a - $MESSAGE" "$FILE"
+              sed -i "/^Fixes:/a - $TEXT" "$FILE"
             fi
 
             git add "$FILE"
@@ -69,12 +72,20 @@ EOF
             git push
           fi
 
+  create-release:
+    needs: update-files
+    if: needs.update-files.outputs.version != ''
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Create GitHub Release
-        if: startsWith(github.event.head_commit.message, 'release:')
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.head_commit.message }}
-          name: Release ${{ github.event.head_commit.message }}
-          body_path: release-notes/${{ github.event.head_commit.message }}.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ needs.update-files.outputs.version }}"
+
+          gh release create "$VERSION" \
+            --title "Release $VERSION" \
+            --notes-file "release-notes/$VERSION.txt"
