@@ -13,12 +13,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Read commit message
+      - name: Get commit message
         id: commit
         run: |
           echo "msg=$(git log -1 --pretty=%B | tr -d '\n')" >> $GITHUB_OUTPUT
 
-      - name: Update release notes file
+      - name: Update release notes
         run: |
           COMMIT_MSG="${{ steps.commit.outputs.msg }}"
           FILE="release-notes/RELEASE_v1.0.89.txt"
@@ -33,14 +33,14 @@ jobs:
             ITEM="- ${COMMIT_MSG#feat: }"
 
             awk -v item="$ITEM" '
-            BEGIN { added=0 }
+            BEGIN { done=0 }
             {
               print
-              if ($0 == "Features:" && !added) {
+              if ($0=="Features:" && !done) {
                 getline
-                if ($0 != "") print
+                if ($0!="") print
                 print item
-                added=1
+                done=1
               }
             }
             ' "$FILE" > tmp && mv tmp "$FILE"
@@ -51,15 +51,18 @@ jobs:
             ITEM="- ${COMMIT_MSG#fix: }"
 
             awk -v item="$ITEM" '
-            BEGIN { added=0 }
+            BEGIN { done=0 }
             {
-              print
-              if ($0 == "Fixes:" && !added) {
+              if ($0=="Fixes:" && !done) {
+                print ""        # 👈 FORCE ONE BLANK LINE
+                print
                 getline
-                if ($0 != "") print
+                if ($0!="") print
                 print item
-                added=1
+                done=1
+                next
               }
+              print
             }
             ' "$FILE" > tmp && mv tmp "$FILE"
           fi
