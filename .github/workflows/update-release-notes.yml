@@ -1,96 +1,68 @@
-name: Update Release Notes
+name: Auto Update Release Notes
 
 on:
   push:
     branches:
       - master
 
+permissions:
+  contents: write
+
 jobs:
   release-notes:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Read commit message
-        id: commit
-        run: |
-          echo "msg=$(git log -1 --pretty=%B | tr -d '\r')" >> $GITHUB_OUTPUT
-
-      - name: Process release notes
-        run: |
-          COMMIT="${{ steps.commit.outputs.msg }}"
-          RELEASE_DIR="release-notes"
-          CURRENT_FILE="$RELEASE_DIR/.current_release"
-
-          mkdir -p "$RELEASE_DIR"
-
-          # -------------------------
-          # RELEASE COMMIT
-          # -------------------------
-          if [[ "$COMMIT" =~ ^release: ]]; then
-            VERSION="${COMMIT#release: }"
-            DATE=$(TZ=Asia/Kolkata date)
-
-            echo "$VERSION" > "$CURRENT_FILE"
-
-            FILE="$RELEASE_DIR/RELEASE_$VERSION.txt"
-
-            cat > "$FILE" <<EOF
-Release $VERSION
-Date: $DATE
-
-Features:
-
-Fixes:
-EOF
-            exit 0
-          fi
-
-          # -------------------------
-          # FEAT / FIX COMMITS
-          # -------------------------
-          [[ ! -f "$CURRENT_FILE" ]] && exit 0
-
-          VERSION=$(cat "$CURRENT_FILE")
-          FILE="$RELEASE_DIR/RELEASE_$VERSION.txt"
-
-          [[ ! -f "$FILE" ]] && exit 0
-
-          if [[ "$COMMIT" =~ ^feat: ]]; then
-            ITEM="- ${COMMIT#feat: }"
-
-            awk -v item="$ITEM" '
-              /^Features:/ {
-                print
-                getline; print
-                print item
-                next
-              }
-              { print }
-            ' "$FILE" > tmp && mv tmp "$FILE"
-
-          elif [[ "$COMMIT" =~ ^fix: ]]; then
-            ITEM="- ${COMMIT#fix: }"
-
-            awk -v item="$ITEM" '
-              /^Fixes:/ {
-                print
-                getline; print
-                print item
-                next
-              }
-              { print }
-            ' "$FILE" > tmp && mv tmp "$FILE"
-          fi
-
-      - name: Commit changes
+      - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add release-notes
-          git diff --cached --quiet && exit 0
+      - name: Update Release Notes
+        run: |
+          COMMIT_MSG="$(git log -1 --pretty=%B)"
+          echo "Commit: $COMMIT_MSG"
 
-          git commit -m "docs: update release notes"
-          git push
+          mkdir -p release-notes
+
+          # ---------------- RELEASE ----------------
+          if [[ "$COMMIT_MSG" == release:* ]]; then
+            VERSION=$(echo "$COMMIT_MSG" | sed 's/release:[[:space:]]*//')
+
+            echo "$VERSION" > release-notes/CURRENT_VERSION.txt
+
+            FILE="release-notes/$VERSION.txt"
+
+            cat <<EOF > "$FILE"
+          Release: $VERSION
+
+          Features:
+
+          Fixes:
+          EOF
+
+            git add release-notes
+            git commit -m "chore: create release $VERSION"
+            git push
+
+          # ---------------- FEAT / FIX ----------------
+          elif [[ "$COMMIT_MSG" == feat:* || "$COMMIT_MSG" == fix:* ]]; then
+            TYPE=$(echo "$COMMIT_MSG" | cut -d: -f1)
+            MESSAGE=$(echo "$COMMIT_MSG" | sed 's/^[a-z]*:[[:space:]]*//')
+
+            VERSION=$(cat release-notes/CURRENT_VERSION.txt)
+            FILE="release-notes/$VERSION.txt"
+
+            if [[ "$TYPE" == "feat" ]]; then
+              sed -i "/Features:/a - $MESSAGE" "$FILE"
+            else
+              sed -i "/Fixes:/a - $MESSAGE" "$FILE"
+            fi
+
+            git add "$FILE"
+            git commit -m "docs: update release notes"
+            git push
+          fi
