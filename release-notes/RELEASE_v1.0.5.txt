@@ -1,9 +1,0 @@
-Release v1.0.5
-Date: Tue Jan 13 18:45:10 IST 2026
-
-Features:
-- hj
-- llllllllllll
-Fixes:
-- wwwwwwwwwwwwww
-- kkkkkkkkk
