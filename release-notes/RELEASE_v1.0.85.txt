@@ -6,6 +6,7 @@ Features:
 - new thing
 - f1
 Fixes:
+- baba
 - haha
 - login page fix
 - api change
