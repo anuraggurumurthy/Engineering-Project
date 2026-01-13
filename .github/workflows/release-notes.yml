@@ -1,48 +1,26 @@
-name: Generate Release Notes
+name: Auto Generate Release Notes
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (example: v1.0.82)"
-        required: true
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
 
 jobs:
-  release-notes:
+  release:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Generate Release Notes
+        uses: softprops/action-gh-release@v2
         with:
-          fetch-depth: 0
-
-      - name: Set variables
-        run: |
-          TAG=${{ github.event.inputs.tag }}
-          echo "VERSION=$TAG" >> $GITHUB_ENV
-          PREV_TAG=$(git tag --sort=-creatordate | grep -v "$TAG" | head -n 1)
-          echo "PREV_TAG=$PREV_TAG" >> $GITHUB_ENV
-
-      - name: Generate Internal Release Notes
-        run: |
-          mkdir -p release-notes/${VERSION}
-          echo "# Internal Release Notes – ${VERSION}" > release-notes/${VERSION}/internal.md
-          echo "" >> release-notes/${VERSION}/internal.md
-          git log ${PREV_TAG}..${VERSION} --pretty=format:"- %s (%an)" >> release-notes/${VERSION}/internal.md
-
-      - name: Generate External Release Notes
-        run: |
-          echo "# External Release Notes – ${VERSION}" > release-notes/${VERSION}/external.md
-          echo "" >> release-notes/${VERSION}/external.md
-          git log ${PREV_TAG}..${VERSION} --pretty=format:"- %s" \
-            | grep -E "^(feat|fix):" \
-            >> release-notes/${VERSION}/external.md || true
-
-      - name: Commit Release Notes
-        run: |
-          git config user.name "release-bot"
-          git config user.email "release-bot@company.com"
-          git add release-notes/${VERSION}
-          git commit -m "docs: add release notes for ${VERSION}" || exit 0
-          git push
+          generate_release_notes: true
+          tag_name: auto-${{ github.run_number }}
+          name: Release auto-${{ github.run_number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
