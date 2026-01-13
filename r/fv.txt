@@ -54,7 +54,7 @@ jobs:
             echo "No feat/fix commit. Skipping."
             exit 0
           fi
-vf
+vfn
       - name: Commit and push changes
         run: |
           git config user.name "github-actions"
