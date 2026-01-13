@@ -1,90 +1,60 @@
-name: Auto Release Notes
+name: Update Release Notes
 
 on:
   push:
     branches:
       - master
 
-permissions:
-  contents: write
-
 jobs:
-  release-notes:
+  update-release-notes:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - name: Generate / Update release notes
+      - name: Get commit message
+        id: commit
         run: |
-          set -e
+          echo "msg=$(git log -1 --pretty=%B | tr -d '\n')" >> $GITHUB_OUTPUT
 
-          AUTHOR=$(git log -1 --pretty=%an)
-          COMMIT_MSG=$(git log -1 --pretty=%s)
-          DATE=$(TZ="Asia/Kolkata" date +"%a %b %d %H:%M:%S IST %Y")
+      - name: Update release notes
+        run: |
+          COMMIT_MSG="${{ steps.commit.outputs.msg }}"
+          FILE="release-notes/RELEASE_v1.0.89.txt"
 
-          # ❌ Ignore bot commits
-          if [[ "$AUTHOR" == "github-actions" ]]; then
-            echo "Skipping bot commit"
-            exit 0
+          if [[ ! -f "$FILE" ]]; then
+            echo "Release file not found"
+            exit 1
           fi
-
-          mkdir -p release-notes
-
-          # -----------------------
-          # RELEASE commit
-          # -----------------------
-          if [[ "$COMMIT_MSG" =~ ^release:\ ?v ]]; then
-            VERSION=$(echo "$COMMIT_MSG" | sed 's/release: //')
-
-            echo "$VERSION" > release-notes/.current_release
-            FILE="release-notes/RELEASE_${VERSION}.txt"
-
-            if [ ! -f "$FILE" ]; then
-              {
-                echo "Release $VERSION"
-                echo "Date: $DATE"
-                echo
-                echo "Features:"
-                echo
-                echo "Fixes:"
-              } > "$FILE"
-            fi
-
-            git config user.name "github-actions"
-            git config user.email "github-actions@github.com"
-
-            git add release-notes
-            git commit -m "docs: start release notes $VERSION"
-            git push
-            exit 0
-          fi
-
-          # -----------------------
-          # FEAT / FIX commits
-          # -----------------------
-          if [ ! -f release-notes/.current_release ]; then
-            echo "No active release"
-            exit 0
-          fi
-
-          VERSION=$(cat release-notes/.current_release)
-          FILE="release-notes/RELEASE_${VERSION}.txt"
 
           if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            sed -i "/^Features:/a\\- ${COMMIT_MSG#feat: }" "$FILE"
+            awk -v msg="- ${COMMIT_MSG#feat: }" '
+            /^Features:/ {
+              print
+              getline
+              print
+              print msg
+              next
+            }
+            { print }
+            ' "$FILE" > tmp && mv tmp "$FILE"
+
           elif [[ "$COMMIT_MSG" =~ ^fix: ]]; then
             sed -i "/^Fixes:/a\\- ${COMMIT_MSG#fix: }" "$FILE"
+
           else
-            echo "Not feat/fix"
+            echo "No feat/fix commit. Skipping."
             exit 0
           fi
 
+      - name: Commit and push changes
+        run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add "$FILE"
-          git commit -m "docs: update release notes $VERSION"
+          git add release-notes/
+          git diff --cached --quiet && exit 0
+
+          git commit -m "docs: update release notes v1.0.89"
           git push
