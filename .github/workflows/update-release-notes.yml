@@ -12,53 +12,84 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get last commit message
+      - name: Read commit message
         id: commit
         run: |
-          echo "msg=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+          echo "msg=$(git log -1 --pretty=%B | tr -d '\r')" >> $GITHUB_OUTPUT
 
-      - name: Update release notes
+      - name: Process release notes
         run: |
-          COMMIT_MSG="${{ steps.commit.outputs.msg }}"
-          FILE="release-notes/RELEASE_v1.0.89.txt"
+          COMMIT="${{ steps.commit.outputs.msg }}"
+          RELEASE_DIR="release-notes"
+          CURRENT_FILE="$RELEASE_DIR/.current_release"
 
-          # Ignore merge & release commits
-          [[ "$COMMIT_MSG" =~ ^Merge ]] && exit 0
-          [[ "$COMMIT_MSG" =~ ^release: ]] && exit 0
+          mkdir -p "$RELEASE_DIR"
 
-          if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            SECTION="Features"
-            ITEM="- ${COMMIT_MSG#feat: }"
-          elif [[ "$COMMIT_MSG" =~ ^fix: ]]; then
-            SECTION="Fixes"
-            ITEM="- ${COMMIT_MSG#fix: }"
-          else
+          # -------------------------
+          # RELEASE COMMIT
+          # -------------------------
+          if [[ "$COMMIT" =~ ^release: ]]; then
+            VERSION="${COMMIT#release: }"
+            DATE=$(TZ=Asia/Kolkata date)
+
+            echo "$VERSION" > "$CURRENT_FILE"
+
+            FILE="$RELEASE_DIR/RELEASE_$VERSION.txt"
+
+            cat > "$FILE" <<EOF
+Release $VERSION
+Date: $DATE
+
+Features:
+
+Fixes:
+EOF
             exit 0
           fi
 
-          awk -v section="$SECTION" -v item="$ITEM" '
-          {
-            print
-            if ($0 == section ":") {
-              getline
-              print item
-            }
-          }
-          END {
-            if (!found) {
-              print ""
-              print section ":"
-              print item
-            }
-          }
-          ' "$FILE" > tmp && mv tmp "$FILE"
+          # -------------------------
+          # FEAT / FIX COMMITS
+          # -------------------------
+          [[ ! -f "$CURRENT_FILE" ]] && exit 0
 
-      - name: Commit & push
+          VERSION=$(cat "$CURRENT_FILE")
+          FILE="$RELEASE_DIR/RELEASE_$VERSION.txt"
+
+          [[ ! -f "$FILE" ]] && exit 0
+
+          if [[ "$COMMIT" =~ ^feat: ]]; then
+            ITEM="- ${COMMIT#feat: }"
+
+            awk -v item="$ITEM" '
+              /^Features:/ {
+                print
+                getline; print
+                print item
+                next
+              }
+              { print }
+            ' "$FILE" > tmp && mv tmp "$FILE"
+
+          elif [[ "$COMMIT" =~ ^fix: ]]; then
+            ITEM="- ${COMMIT#fix: }"
+
+            awk -v item="$ITEM" '
+              /^Fixes:/ {
+                print
+                getline; print
+                print item
+                next
+              }
+              { print }
+            ' "$FILE" > tmp && mv tmp "$FILE"
+          fi
+
+      - name: Commit changes
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add release-notes/
+          git add release-notes
           git diff --cached --quiet && exit 0
 
           git commit -m "docs: update release notes"
