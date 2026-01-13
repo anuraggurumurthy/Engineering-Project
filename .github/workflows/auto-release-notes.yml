@@ -6,67 +6,69 @@ on:
       - master
 
 jobs:
-  generate-release-notes:
+  update-release-notes:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo (FULL HISTORY)
+      - name: Checkout repo (full history)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Generate release notes
+      - name: Update release notes
         run: |
           set -e
 
-          # Get latest release commit
-          RELEASE_COMMIT=$(git log --grep="^release:" --format="%H" -n 1)
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          COMMIT_SUBJECT=$(git log -1 --pretty=%s)
 
-          if [ -z "$RELEASE_COMMIT" ]; then
-            echo "No release commit found"
+          # Find latest release version
+          LAST_RELEASE=$(git log --grep="^release:" --format="%s" -n 1 | sed 's/release:[[:space:]]*//')
+
+          if [ -z "$LAST_RELEASE" ]; then
+            echo "No release found. Skipping."
             exit 0
           fi
 
-          VERSION=$(git log -1 --pretty=%B "$RELEASE_COMMIT" | sed 's/release:[[:space:]]*//')
+          mkdir -p release-notes
+          FILE="release-notes/RELEASE_v${LAST_RELEASE}.txt"
 
-          # Get previous release commit
-          PREV_RELEASE=$(git log --grep="^release:" --format="%H" -n 2 | tail -n 1)
-
-          if [ -z "$PREV_RELEASE" ]; then
-            RANGE="$RELEASE_COMMIT"
-          else
-            RANGE="$PREV_RELEASE..$RELEASE_COMMIT"
+          # Create file if it doesn't exist
+          if [ ! -f "$FILE" ]; then
+            {
+              echo "Release v${LAST_RELEASE}"
+              echo "Date: $(TZ=Asia/Kolkata date)"
+              echo
+              echo "Features:"
+              echo
+              echo "Fixes:"
+            } > "$FILE"
           fi
 
-          echo "Commit range: $RANGE"
+          # Ignore release commits
+          if echo "$COMMIT_SUBJECT" | grep -q "^release:"; then
+            echo "Release commit detected. No append needed."
+            exit 0
+          fi
 
-          FEATURES=$(git log $RANGE --no-merges --pretty=%s | grep "^feat:" || true)
-          FIXES=$(git log $RANGE --no-merges --pretty=%s | grep "^fix:" || true)
+          # Append feat
+          if echo "$COMMIT_SUBJECT" | grep -q "^feat:"; then
+            sed -i "/^Features:/a\\- ${COMMIT_SUBJECT#feat: }" "$FILE"
+          fi
 
-          mkdir -p release-notes
-          FILE="release-notes/RELEASE_v${VERSION}.txt"
-
-          {
-            echo "Release v${VERSION}"
-            echo "Date: $(TZ=Asia/Kolkata date)"
-            echo
-            echo "Features:"
-            if [ -n "$FEATURES" ]; then
-              echo "$FEATURES" | sed 's/^/- /'
-            else
-              echo "- None"
-            fi
-            echo
-            echo "Fixes:"
-            if [ -n "$FIXES" ]; then
-              echo "$FIXES" | sed 's/^/- /'
-            else
-              echo "- None"
-            fi
-          } > "$FILE"
+          # Append fix
+          if echo "$COMMIT_SUBJECT" | grep -q "^fix:"; then
+            sed -i "/^Fixes:/a\\- ${COMMIT_SUBJECT#fix: }" "$FILE"
+          fi
 
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add "$FILE"
-          git commit -m "docs: release notes v${VERSION}"
-          git push
+
+          # Commit only if file changed
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: update release notes v${LAST_RELEASE}"
+            git push
+          else
+            echo "No changes to commit"
+          fi
