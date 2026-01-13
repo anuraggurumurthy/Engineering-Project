@@ -1,4 +1,4 @@
-name: Update Release Notes
+name: Auto Release Notes
 
 on:
   push:
@@ -6,86 +6,67 @@ on:
       - master
 
 jobs:
-  update-release-notes:
+  generate-release-notes:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repo (FULL HISTORY)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Get last commit message
-        id: commit
+      - name: Generate release notes
         run: |
-          echo "msg=$(git log -1 --pretty=%B | tr -d '\r\n')" >> $GITHUB_OUTPUT
+          set -e
 
-      - name: Resolve release file
-        id: release
-        run: |
-          MSG="${{ steps.commit.outputs.msg }}"
+          # Get latest release commit
+          RELEASE_COMMIT=$(git log --grep="^release:" --format="%H" -n 1)
 
-          if [[ "$MSG" =~ ^release:\ ([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            VERSION="${BASH_REMATCH[1]}"
-          else
-            VERSION=$(ls release-notes | sort -V | tail -1 | sed 's/RELEASE_v//;s/.txt//')
-          fi
-
-          FILE="release-notes/RELEASE_v${VERSION}.txt"
-
-          if [[ ! -f "$FILE" ]]; then
-            echo "❌ Release file not found: $FILE"
-            exit 1
-          fi
-
-          echo "file=$FILE" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Update release notes
-        run: |
-          MSG="${{ steps.commit.outputs.msg }}"
-          FILE="${{ steps.release.outputs.file }}"
-
-          if [[ "$MSG" =~ ^feat:\ (.+)$ ]]; then
-            TEXT="- ${BASH_REMATCH[1]}"
-            SECTION="Features"
-
-          elif [[ "$MSG" =~ ^fix:\ (.+)$ ]]; then
-            TEXT="- ${BASH_REMATCH[1]}"
-            SECTION="Fixes"
-
-          else
-            echo "ℹ️ Not a feat/fix commit. Skipping."
+          if [ -z "$RELEASE_COMMIT" ]; then
+            echo "No release commit found"
             exit 0
           fi
 
-          awk -v section="$SECTION" -v text="$TEXT" '
-          BEGIN { added=0 }
-          {
-            print
-            if ($0 == section ":") {
-              getline
-              if ($0 != "") print ""
-              print text
-              print ""
-              added=1
-            }
-          }
-          END {
-            if (!added) {
-              print ""
-              print section ":"
-              print text
-              print ""
-            }
-          }
-          ' "$FILE" > tmp && mv tmp "$FILE"
+          VERSION=$(git log -1 --pretty=%B "$RELEASE_COMMIT" | sed 's/release:[[:space:]]*//')
 
-      - name: Commit and push changes
-        run: |
+          # Get previous release commit
+          PREV_RELEASE=$(git log --grep="^release:" --format="%H" -n 2 | tail -n 1)
+
+          if [ -z "$PREV_RELEASE" ]; then
+            RANGE="$RELEASE_COMMIT"
+          else
+            RANGE="$PREV_RELEASE..$RELEASE_COMMIT"
+          fi
+
+          echo "Commit range: $RANGE"
+
+          FEATURES=$(git log $RANGE --no-merges --pretty=%s | grep "^feat:" || true)
+          FIXES=$(git log $RANGE --no-merges --pretty=%s | grep "^fix:" || true)
+
+          mkdir -p release-notes
+          FILE="release-notes/RELEASE_v${VERSION}.txt"
+
+          {
+            echo "Release v${VERSION}"
+            echo "Date: $(TZ=Asia/Kolkata date)"
+            echo
+            echo "Features:"
+            if [ -n "$FEATURES" ]; then
+              echo "$FEATURES" | sed 's/^/- /'
+            else
+              echo "- None"
+            fi
+            echo
+            echo "Fixes:"
+            if [ -n "$FIXES" ]; then
+              echo "$FIXES" | sed 's/^/- /'
+            else
+              echo "- None"
+            fi
+          } > "$FILE"
+
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-
-          git add release-notes/
-          git diff --cached --quiet && exit 0
-
-          git commit -m "docs: update release notes ${{ steps.release.outputs.version }}"
+          git add "$FILE"
+          git commit -m "docs: release notes v${VERSION}"
           git push
