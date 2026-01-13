@@ -10,13 +10,15 @@ permissions:
 
 jobs:
   release:
+    # Run ONLY when last commit is release:
     if: startsWith(github.event.head_commit.message, 'release:')
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # REQUIRED for git history
 
       - name: Extract version
         id: version
@@ -33,12 +35,21 @@ jobs:
           echo "Date: $(TZ=Asia/Kolkata date '+%a %b %d %H:%M:%S IST %Y')" >> $FILE
           echo "" >> $FILE
 
+          # Get previous release commit (NOT tag)
+          PREV_RELEASE_COMMIT=$(git log --grep="^release:" --pretty=format:"%H" -n 2 | tail -n 1)
+
+          if [ -n "$PREV_RELEASE_COMMIT" ]; then
+            RANGE="$PREV_RELEASE_COMMIT..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+
           echo "Features:" >> $FILE
-          git log --pretty=format:"- %s" | grep "^feat:" || true >> $FILE
+          git log $RANGE --pretty=format:"- %s" | grep "^feat:" || true >> $FILE
           echo "" >> $FILE
 
           echo "Fixes:" >> $FILE
-          git log --pretty=format:"- %s" | grep "^fix:" || true >> $FILE
+          git log $RANGE --pretty=format:"- %s" | grep "^fix:" || true >> $FILE
 
       - name: Commit release notes
         run: |
