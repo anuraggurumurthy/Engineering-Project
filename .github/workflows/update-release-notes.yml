@@ -1,0 +1,79 @@
+name: Auto Update Release Notes
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release-notes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Process commit
+        run: |
+          set -e
+
+          COMMIT_MSG="$(git log -1 --pretty=%s)"
+          DATE="$(TZ=Asia/Kolkata date '+%a %b %d %H:%M:%S IST %Y')"
+
+          mkdir -p release-notes
+
+          echo "Commit: $COMMIT_MSG"
+
+          # ---------------- RELEASE ----------------
+          if [[ "$COMMIT_MSG" =~ ^release:\ (.+)$ ]]; then
+            VERSION="${BASH_REMATCH[1]}"
+            FILE="release-notes/RELEASE_v$VERSION.txt"
+
+            echo "$VERSION" > release-notes/.current_release
+
+            {
+              echo "Release v$VERSION Date: $DATE"
+              echo
+              echo "Features:"
+              echo
+              echo "Fixes:"
+              echo
+            } > "$FILE"
+
+            git add "$FILE" release-notes/.current_release
+            git commit -m "docs: create release v$VERSION"
+            git push
+            exit 0
+          fi
+
+          # ---------------- REQUIRE ACTIVE RELEASE ----------------
+          if [ ! -f release-notes/.current_release ]; then
+            echo "No active release. Skipping."
+            exit 0
+          fi
+
+          VERSION="$(cat release-notes/.current_release)"
+          FILE="release-notes/RELEASE_v$VERSION.txt"
+
+          # ---------------- FEATURE ----------------
+          if [[ "$COMMIT_MSG" =~ ^feat:\ (.+)$ ]]; then
+            sed -i "/^Features:/a\\\n- ${BASH_REMATCH[1]}" "$FILE"
+          fi
+
+          # ---------------- FIX ----------------
+          if [[ "$COMMIT_MSG" =~ ^fix:\ (.+)$ ]]; then
+            sed -i "/^Fixes:/a\\\n- ${BASH_REMATCH[1]}" "$FILE"
+          fi
+
+          git add "$FILE"
+
+          if git diff --cached --quiet; then
+            echo "Nothing to commit"
+            exit 0
+          fi
+
+          git commit -m "docs: update release v$VERSION"
+          git push
