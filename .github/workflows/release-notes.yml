@@ -10,22 +10,24 @@ permissions:
 
 jobs:
   release:
-    if: contains(github.event.head_commit.message, 'release:')
+    if: startsWith(github.event.head_commit.message, 'release:')
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Extract version
         id: version
         run: |
-          VERSION=$(echo "${{ github.event.head_commit.message }}" | sed 's/release: //')
+          VERSION=$(echo "${{ github.event.head_commit.message }}" | cut -d' ' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Generate release notes
         run: |
-          FILE=releases/RELEASE_${{ steps.version.outputs.version }}.txt
-          mkdir -p releases
+          FILE=release-notes/RELEASE_${{ steps.version.outputs.version }}.txt
+          mkdir -p release-notes
 
           echo "Release ${{ steps.version.outputs.version }}" > $FILE
           echo "Date: $(date)" >> $FILE
@@ -42,7 +44,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add releases/
+          git add release-notes/
           git commit -m "docs: release notes ${{ steps.version.outputs.version }}"
           git push
 
@@ -51,6 +53,6 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.version }}
           name: Release ${{ steps.version.outputs.version }}
-          body_path: releases/RELEASE_${{ steps.version.outputs.version }}.txt
+          body_path: release-notes/RELEASE_${{ steps.version.outputs.version }}.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
