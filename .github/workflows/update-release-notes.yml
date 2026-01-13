@@ -18,37 +18,61 @@ jobs:
         run: |
           echo "msg=$(git log -1 --pretty=%B | tr -d '\n')" >> $GITHUB_OUTPUT
 
+      - name: Get current release file
+        id: release
+        run: |
+          VERSION=$(ls release-notes/RELEASE_v*.txt | sort -V | tail -n 1)
+          echo "file=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Update release notes
         run: |
           COMMIT_MSG="${{ steps.commit.outputs.msg }}"
-          FILE="release-notes/RELEASE_v1.0.89.txt"
+          FILE="${{ steps.release.outputs.file }}"
 
           if [[ ! -f "$FILE" ]]; then
             echo "Release file not found"
             exit 1
           fi
 
+          # ---------- FEAT ----------
           if [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            FEATURE="- ${COMMIT_MSG#feat: }"
+            ENTRY="- ${COMMIT_MSG#feat: }"
 
-            awk -v feature="$FEATURE" '
-            BEGIN { added=0 }
+            awk -v entry="$ENTRY" '
+            BEGIN { done=0 }
             /^Features:/ {
               print
-              getline
-              while ($0 == "") getline   # REMOVE blank lines
-              if (!added) {
-                print feature
-                added=1
+              print ""           # <<< FORCE BLANK LINE
+              while (getline && $0 ~ /^-/) print
+              if (!done) {
+                print entry
+                done=1
               }
-              print
+              print ""
               next
             }
             { print }
             ' "$FILE" > tmp && mv tmp "$FILE"
 
+          # ---------- FIX ----------
           elif [[ "$COMMIT_MSG" =~ ^fix: ]]; then
-            sed -i "/^Fixes:/a\\- ${COMMIT_MSG#fix: }" "$FILE"
+            ENTRY="- ${COMMIT_MSG#fix: }"
+
+            awk -v entry="$ENTRY" '
+            BEGIN { done=0 }
+            /^Fixes:/ {
+              print
+              print ""           # <<< FORCE BLANK LINE
+              while (getline && $0 ~ /^-/) print
+              if (!done) {
+                print entry
+                done=1
+              }
+              print ""
+              next
+            }
+            { print }
+            ' "$FILE" > tmp && mv tmp "$FILE"
 
           else
             echo "No feat/fix commit. Skipping."
@@ -63,5 +87,5 @@ jobs:
           git add release-notes/
           git diff --cached --quiet && exit 0
 
-          git commit -m "docs: update release notes v1.0.89"
+          git commit -m "docs: update release notes"
           git push
