@@ -30,7 +30,7 @@ jobs:
           mkdir -p release-notes
 
           echo "Release ${{ steps.version.outputs.version }}" > $FILE
-          echo "Date: $(date)" >> $FILE
+          echo "Date: $(TZ=Asia/Kolkata date '+%a %b %d %H:%M:%S IST %Y')" >> $FILE
           echo "" >> $FILE
 
           echo "Features:" >> $FILE
