@@ -2,5 +2,6 @@ Release v1.0.86
 Date: Wed Jan 14 09:21:14 IST 2026
 
 Features:
+- login page
 Fixes:
 - apppium
