@@ -40,6 +40,12 @@ jobs:
               echo
               echo "Features:"
               echo "Fixes:"
+              echo "Docs:"
+              echo "Style:"
+              echo "Tests:"
+              echo "Build:"
+              echo "CI:"
+              echo "Chore:"
             } > "$FILE"
           fi
 
@@ -49,17 +55,25 @@ jobs:
             exit 0
           fi
 
-          # Append feature under Features block
-          if echo "$COMMIT_SUBJECT" | grep -q "^feat:"; then
-            sed -i "/^Features:/,/^Fixes:/{
-              /^Features:/a\\- ${COMMIT_SUBJECT#feat: }
-            }" "$FILE"
-          fi
+          add_entry() {
+            local section="$1"
+            local text="$2"
+            sed -i "/^${section}:/a\\- ${text}" "$FILE"
+          }
 
-          # Append fix under Fixes block
-          if echo "$COMMIT_SUBJECT" | grep -q "^fix:"; then
-            sed -i "/^Fixes:/a\\- ${COMMIT_SUBJECT#fix: }" "$FILE"
-          fi
+          case "$COMMIT_SUBJECT" in
+            feat:*)      add_entry "Features" "${COMMIT_SUBJECT#feat: }" ;;
+            perf:*)      add_entry "Features" "${COMMIT_SUBJECT#perf: }" ;;
+            fix:*)       add_entry "Fixes"    "${COMMIT_SUBJECT#fix: }" ;;
+            refactor:*)  add_entry "Fixes"    "${COMMIT_SUBJECT#refactor: }" ;;
+            docs:*)      add_entry "Docs"     "${COMMIT_SUBJECT#docs: }" ;;
+            style:*)     add_entry "Style"    "${COMMIT_SUBJECT#style: }" ;;
+            test:*)      add_entry "Tests"    "${COMMIT_SUBJECT#test: }" ;;
+            build:*)     add_entry "Build"    "${COMMIT_SUBJECT#build: }" ;;
+            ci:*)        add_entry "CI"       "${COMMIT_SUBJECT#ci: }" ;;
+            chore:*)     add_entry "Chore"    "${COMMIT_SUBJECT#chore: }" ;;
+            *)           echo "Prefix not tracked. Skipping." ;;
+          esac
 
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
