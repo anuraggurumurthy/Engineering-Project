@@ -8,6 +8,7 @@ fixes:
 docs:
 - add
 style:
+- add
 refactor:
 build:
 ci:
