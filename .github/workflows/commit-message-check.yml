@@ -4,31 +4,48 @@ on:
   push:
     branches:
       - master
+  pull_request:
 
 jobs:
-  validate-commit-message:
+  commit-message-check:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
-      - name: Validate commit message
+      - name: Validate commit messages
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=%s)
+          set -e
 
-          echo "Commit message: $COMMIT_MSG"
+          echo "Checking commit messages..."
 
-          if echo "$COMMIT_MSG" | grep -Eq '^(feat|fix|release|docs): .+'; then
-            echo "✅ Commit message is valid"
+          # Allowed prefixes (STRICT)
+          VALID_PREFIX_REGEX="^(feat|perf|fix|docs|style|refactor|build|ci|chore|release): "
+
+          # Get commit range
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            COMMITS=$(git log --pretty=%s origin/${{ github.base_ref }}..HEAD)
           else
-            echo "❌ Invalid commit message!"
-            echo "Allowed formats:"
-            echo "  feat: message"
-            echo "  fix: message"
-            echo "  release: x.y.z"
-            echo "  docs: message"
-            exit 1
+            COMMITS=$(git log --pretty=%s HEAD~1..HEAD)
           fi
+
+          echo "$COMMITS" | while read -r COMMIT_MSG; do
+            echo "→ $COMMIT_MSG"
+
+            if ! echo "$COMMIT_MSG" | grep -Eq "$VALID_PREFIX_REGEX"; then
+              echo
+              echo "❌ INVALID COMMIT MESSAGE"
+              echo "Allowed prefixes:"
+              echo "  feat:, perf:, fix:, docs:, style:, refactor:, build:, ci:, chore:, release:"
+              echo
+              echo "Example:"
+              echo "  feat: add workflow retry logic"
+              echo
+              exit 1
+            fi
+          done
+
+          echo "✅ All commit messages are valid"
