@@ -35,17 +35,17 @@ jobs:
           # Create release file if it doesn't exist
           if [ ! -f "$FILE" ]; then
             {
-              echo "Release v${LAST_RELEASE}"
-              echo "Date: $(TZ=Asia/Kolkata date)"
+              echo "release v${LAST_RELEASE}"
+              echo "date: $(TZ=Asia/Kolkata date)"
               echo
-              echo "Features:"
-              echo "Fixes:"
-              echo "Docs:"
-              echo "Style:"
-              echo "Tests:"
-              echo "Build:"
-              echo "CI:"
-              echo "Chore:"
+              echo "features:"
+              echo "fixes:"
+              echo "docs:"
+              echo "style:"
+              echo "refactor:"
+              echo "build:"
+              echo "ci:"
+              echo "chore:"
             } > "$FILE"
           fi
 
@@ -62,16 +62,15 @@ jobs:
           }
 
           case "$COMMIT_SUBJECT" in
-            feat:*)      add_entry "Features" "${COMMIT_SUBJECT#feat: }" ;;
-            perf:*)      add_entry "Features" "${COMMIT_SUBJECT#perf: }" ;;
-            fix:*)       add_entry "Fixes"    "${COMMIT_SUBJECT#fix: }" ;;
-            refactor:*)  add_entry "Fixes"    "${COMMIT_SUBJECT#refactor: }" ;;
-            docs:*)      add_entry "Docs"     "${COMMIT_SUBJECT#docs: }" ;;
-            style:*)     add_entry "Style"    "${COMMIT_SUBJECT#style: }" ;;
-            test:*)      add_entry "Tests"    "${COMMIT_SUBJECT#test: }" ;;
-            build:*)     add_entry "Build"    "${COMMIT_SUBJECT#build: }" ;;
-            ci:*)        add_entry "CI"       "${COMMIT_SUBJECT#ci: }" ;;
-            chore:*)     add_entry "Chore"    "${COMMIT_SUBJECT#chore: }" ;;
+            feat:*)      add_entry "features" "${COMMIT_SUBJECT#feat: }" ;;
+            perf:*)      add_entry "features" "${COMMIT_SUBJECT#perf: }" ;;
+            fix:*)       add_entry "fixes"    "${COMMIT_SUBJECT#fix: }" ;;
+            docs:*)      add_entry "docs"     "${COMMIT_SUBJECT#docs: }" ;;
+            style:*)     add_entry "style"    "${COMMIT_SUBJECT#style: }" ;;
+            refactor:*)  add_entry "refactor" "${COMMIT_SUBJECT#refactor: }" ;;
+            build:*)     add_entry "build"    "${COMMIT_SUBJECT#build: }" ;;
+            ci:*)        add_entry "ci"       "${COMMIT_SUBJECT#ci: }" ;;
+            chore:*)     add_entry "chore"    "${COMMIT_SUBJECT#chore: }" ;;
             *)           echo "Prefix not tracked. Skipping." ;;
           esac
 
