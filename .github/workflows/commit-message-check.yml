@@ -20,51 +20,28 @@ jobs:
         run: |
           set -e
 
-          echo "Checking commit messages..."
-
-          # Allowed prefixes (STRICT, lowercase only)
           VALID_PREFIX_REGEX="^(feat|perf|fix|docs|style|refactor|build|ci|chore|release):"
 
-          # Get commit range
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            COMMITS=$(git log --pretty=%s origin/${{ github.base_ref }}..HEAD)
-          else
-            COMMITS=$(git log --pretty=%s HEAD~1..HEAD)
-          fi
-
-          echo "$COMMITS" | while read -r COMMIT_MSG; do
-            echo "→ $COMMIT_MSG"
-
-            # ✅ Skip merge commits
-            if [[ "$COMMIT_MSG" =~ ^Merge\  ]]; then
-              echo "Skipping merge commit"
-              continue
-            fi
+          # ✅ PUSH → validate commit message
+          if [ "${{ github.event_name }}" = "push" ]; then
+            COMMIT_MSG=$(git log -1 --pretty=%s)
+            echo "Checking commit message: $COMMIT_MSG"
 
             if ! echo "$COMMIT_MSG" | grep -Eq "$VALID_PREFIX_REGEX"; then
-              echo
               echo "❌ INVALID COMMIT MESSAGE"
-              echo "Allowed prefixes:"
-              echo "  feat:, perf:, fix:, docs:, style:, refactor:, build:, ci:, chore:, release:"
-              echo
-              echo "Example:"
-              echo "  feat: add workflow retry logic"
               exit 1
             fi
-          done
+          fi
 
-          # 🔥 PR TITLE VALIDATION (NEW)
+          # ✅ PR → validate PR title ONLY
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             PR_TITLE="${{ github.event.pull_request.title }}"
             echo "Checking PR title: $PR_TITLE"
 
             if ! echo "$PR_TITLE" | grep -Eq "$VALID_PREFIX_REGEX"; then
-              echo
               echo "❌ INVALID PR TITLE"
-              echo "PR title must start with one of:"
-              echo "  feat:, perf:, fix:, docs:, style:, refactor:, build:, ci:, chore:, release:"
               exit 1
             fi
           fi
 
-          echo "✅ All commit messages and PR title are valid"
+          echo "✅ Validation passed"
