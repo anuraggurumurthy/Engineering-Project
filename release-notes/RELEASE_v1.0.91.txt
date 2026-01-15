@@ -5,6 +5,7 @@ features:
 fixes:
 - done
 docs:
+- updated
 style:
 refactor:
 build:
