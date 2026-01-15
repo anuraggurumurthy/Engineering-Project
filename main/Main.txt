@@ -1,6 +1,1 @@
-Github-release note workflow automation
-
-Before committing add these prefix
->  predfix
-	-Feat:
-	-Fix: ghjk
+a
