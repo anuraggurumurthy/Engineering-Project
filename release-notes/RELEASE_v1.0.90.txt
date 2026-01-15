@@ -12,5 +12,6 @@ style:
 refactor:
 - add
 build:
+- add
 ci:
 chore:
