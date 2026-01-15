@@ -6,6 +6,7 @@ features:
 fixes:
 - add
 docs:
+- add
 style:
 refactor:
 build:
