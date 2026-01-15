@@ -19,6 +19,8 @@ jobs:
         run: |
           set -e
 
+          SEPARATOR="----------------------------------------------------------------------------------------------------------------------"
+
           COMMIT_SUBJECT=$(git log -1 --pretty=%s)
 
           # Find latest release version
@@ -39,13 +41,21 @@ jobs:
               echo "date: $(TZ=Asia/Kolkata date)"
               echo
               echo "features:"
+              echo "$SEPARATOR"
               echo "fixes:"
+              echo "$SEPARATOR"
               echo "docs:"
+              echo "$SEPARATOR"
               echo "style:"
+              echo "$SEPARATOR"
               echo "refactor:"
+              echo "$SEPARATOR"
               echo "build:"
+              echo "$SEPARATOR"
               echo "ci:"
+              echo "$SEPARATOR"
               echo "chore:"
+              echo "$SEPARATOR"
             } > "$FILE"
           fi
 
@@ -58,7 +68,9 @@ jobs:
           add_entry() {
             local section="$1"
             local text="$2"
-            sed -i "/^${section}:/a\\- ${text}" "$FILE"
+            sed -i "/^${section}:/,/^${SEPARATOR}$/{
+              /^${SEPARATOR}$/i\\- ${text}
+            }" "$FILE"
           }
 
           case "$COMMIT_SUBJECT" in
