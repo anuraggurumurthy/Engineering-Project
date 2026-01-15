@@ -10,6 +10,7 @@ docs:
 style:
 - add
 refactor:
+- add
 build:
 ci:
 chore:
