@@ -16,13 +16,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate commit messages
+      - name: Validate commit messages and PR title
         run: |
           set -e
 
           echo "Checking commit messages..."
 
-          # Allowed prefixes (STRICT)
+          # Allowed prefixes (STRICT, lowercase only)
           VALID_PREFIX_REGEX="^(feat|perf|fix|docs|style|refactor|build|ci|chore|release):"
 
           # Get commit range
@@ -35,7 +35,7 @@ jobs:
           echo "$COMMITS" | while read -r COMMIT_MSG; do
             echo "→ $COMMIT_MSG"
 
-            # ✅ SKIP MERGE COMMITS
+            # ✅ Skip merge commits
             if [[ "$COMMIT_MSG" =~ ^Merge\  ]]; then
               echo "Skipping merge commit"
               continue
@@ -53,4 +53,18 @@ jobs:
             fi
           done
 
-          echo "✅ All commit messages are valid"
+          # 🔥 PR TITLE VALIDATION (NEW)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            echo "Checking PR title: $PR_TITLE"
+
+            if ! echo "$PR_TITLE" | grep -Eq "$VALID_PREFIX_REGEX"; then
+              echo
+              echo "❌ INVALID PR TITLE"
+              echo "PR title must start with one of:"
+              echo "  feat:, perf:, fix:, docs:, style:, refactor:, build:, ci:, chore:, release:"
+              exit 1
+            fi
+          fi
+
+          echo "✅ All commit messages and PR title are valid"
