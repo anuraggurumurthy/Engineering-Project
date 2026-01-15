@@ -18,6 +18,7 @@ docs:
 style:
 refactor:
 build:
+- built
 ci:
 - ohhhhhhhhhhhhhhhhhhhhhhhhhhh
 chore:
